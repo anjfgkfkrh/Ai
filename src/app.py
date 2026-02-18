@@ -22,7 +22,6 @@ with gr.Blocks() as demo:
         fn=chat,
         type="messages",
         title="Human - AI(아이)",
-        description="대화 내용을 Graph DB에 기억하는 프로토타입 챗봇",
     )
     chatbot.chatbot.clear(on_clear)
     demo.unload(lambda: pipeline.close_session())

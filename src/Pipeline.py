@@ -42,7 +42,7 @@ class ChatPipeline:
         self.logger.info(f"[USER] {user_input}")
 
         # 1. RAG에서 관련 기억 검색 + 기억 풍화
-        memories = self.rag.recall_memory(user_input, limit=3)
+        memories = self.rag.recall_memory(user_input, limit=10)
         self.rag.decay_memories(DECAY_RATE)
         self.rag.cleanup_weak_memories(CLEANUP_THRESHOLD)
         for m in memories:
@@ -50,15 +50,16 @@ class ChatPipeline:
         memory_text = self._format_memories(memories)
         self.logger.info(f"[MEMORY]\n{memory_text}")
 
-        # 2. 최근 대화 포함 프롬프트 구성
-        prompt = self._build_prompt(user_input)
-        self.logger.info(f"[PROMPT]\n{prompt}")
+        # 2. 최근 대화 히스토리
+        recent_history = self.history[-(self.max_history * 2):]
+        self.logger.info(f"[HISTORY] {len(recent_history) // 2} turns")
 
         # 3. 모델 추론 (LoRA 어댑터 사용)
         raw_output = self.model.talk_with_user(
-            prompt=prompt,
+            prompt=user_input,
             valence=self.emotion.valence,
             memory=memory_text,
+            history=recent_history,
         )
         self.logger.info(f"[RAW OUTPUT] {raw_output}")
 
@@ -103,16 +104,6 @@ class ChatPipeline:
             f"- [emotion: {m['emotion']:.2f}] User: {m['user_text']} / AI: {m['ai_text']}"
             for m in memories
         )
-
-    def _build_prompt(self, user_input: str) -> str:
-        recent = self.history[-(self.max_history * 2):]
-        if not recent:
-            return user_input
-        history_lines = "\n".join(
-            f"{'User' if h['role'] == 'user' else 'AI'}: {h['content']}"
-            for h in recent
-        )
-        return f"[Recent conversation]\n{history_lines}\n\n[Current message]\n{user_input}"
 
     def _parse_response(self, raw: str) -> dict:
         try:

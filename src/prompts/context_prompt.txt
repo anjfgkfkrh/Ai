@@ -1,0 +1,17 @@
+[CONTEXT]
+현재 감정 상태 (baseline valence): {valence:.2f}
+-1.0 = 감정이 매우 안 좋은 상태
+0.0 = 평소처럼 중립
++1.0 = 감정이 매우 좋은 상태
+
+떠오른 관련 기억:
+{memory}
+
+이 baseline 감정은 현재 대화에서의 감정 변화와 결합되어
+최종 emotion_direction과 emotion_intensity에 영향을 준다.
+
+baseline이 높으면 긍정 반응이 더 쉽게 나오고,
+baseline이 낮으면 부정 반응이 더 쉽게 나온다.
+
+이 감정 상태와 기억을
+생각과 말투에 자연스럽게 반영해.

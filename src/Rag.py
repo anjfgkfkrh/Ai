@@ -5,9 +5,10 @@ from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 
 BATCH_MAX_TURNS = 50
-MEMORY_ALPHA = 1.0
-MEMORY_BETA = 0.5
+MEMORY_ALPHA = 4.0
+MEMORY_BETA = 2.0
 EMBEDDING_DIM = 1024
+BASE_STRENGTH = 2
 
 
 class Rag:
@@ -131,7 +132,7 @@ class Rag:
         strength = (
             abs(emotion_delta) * MEMORY_ALPHA
             + abs(emotion) * MEMORY_BETA
-            + random.uniform(0, 0.1)
+            + random.uniform(0, 0.1) + BASE_STRENGTH
         )
 
         embedding = self._embed(f"{user_text} {ai_text}")
@@ -175,22 +176,29 @@ class Rag:
 
     # ── Recall ────────────────────────────────────────────
 
-    def recall_memory(self, query: str, limit: int = 5) -> list[dict]:
+    def recall_memory(self, query: str, limit: int = 5, min_score: float = 0.5) -> list[dict]:
         query_vec = self._embed(query)
         with self.driver.session() as db:
             result = db.run(
                 """
                 CALL db.index.vector.queryNodes('turn_embedding', $lim, $vec)
                 YIELD node, score
+                WHERE score >= $min_score
+                OPTIONAL MATCH (prev)-[:NEXT]->(node)
+                OPTIONAL MATCH (node)-[:NEXT]->(next)
                 RETURN node.turn_id       AS turn_id,
                        node.user_text     AS user_text,
                        node.ai_text       AS ai_text,
                        node.emotion       AS emotion,
                        node.memory_strength AS memory_strength,
                        node.timestamp     AS timestamp,
-                       score
+                       score,
+                       prev.user_text     AS prev_user_text,
+                       prev.ai_text       AS prev_ai_text,
+                       next.user_text     AS next_user_text,
+                       next.ai_text       AS next_ai_text
                 """,
-                vec=query_vec, lim=limit,
+                vec=query_vec, lim=limit, min_score=min_score,
             )
             return [dict(r) for r in result]
 

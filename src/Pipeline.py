@@ -9,6 +9,7 @@ from Emotion import EmotionState
 DECAY_RATE = 0.95
 RECALL_BOOST = 0.3
 CLEANUP_THRESHOLD = 0.1
+MIN_SIMILARITY = 0.7
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 
 
@@ -42,7 +43,7 @@ class ChatPipeline:
         self.logger.info(f"[USER] {user_input}")
 
         # 1. RAG에서 관련 기억 검색 + 기억 풍화
-        memories = self.rag.recall_memory(user_input, limit=10)
+        memories = self.rag.recall_memory(user_input, limit=10, min_score=MIN_SIMILARITY)
         self.rag.decay_memories(DECAY_RATE)
         self.rag.cleanup_weak_memories(CLEANUP_THRESHOLD)
         for m in memories:
@@ -88,9 +89,10 @@ class ChatPipeline:
             emotion_delta=emotion_delta,
         )
 
-        # 7. 히스토리 갱신
+        # 7. 히스토리 갱신 (max_history 턴만 유지)
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": utterance})
+        self.history = self.history[-(self.max_history * 2):]
 
         self.logger.info(f"[UTTERANCE] {utterance}")
         return utterance
@@ -100,10 +102,16 @@ class ChatPipeline:
     def _format_memories(self, memories: list[dict]) -> str:
         if not memories:
             return "(no relevant memories)"
-        return "\n".join(
-            f"- [emotion: {m['emotion']:.2f}] User: {m['user_text']} / AI: {m['ai_text']}"
-            for m in memories
-        )
+        blocks = []
+        for m in memories:
+            lines = []
+            if m.get("prev_user_text"):
+                lines.append(f"  (이전) User: {m['prev_user_text']} / AI: {m['prev_ai_text']}")
+            lines.append(f"  (매칭) [emotion: {m['emotion']:.2f}] User: {m['user_text']} / AI: {m['ai_text']}")
+            if m.get("next_user_text"):
+                lines.append(f"  (이후) User: {m['next_user_text']} / AI: {m['next_ai_text']}")
+            blocks.append("\n".join(lines))
+        return "\n---\n".join(blocks)
 
     def _parse_response(self, raw: str) -> dict:
         try:

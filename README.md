@@ -3,7 +3,7 @@
 > **이 프로젝트는 현재 개발 중입니다.**
 
 감정과 기억을 가진 대화형 AI 프로토타입.
-Neo4j Graph DB에 대화를 저장하고, 감정 상태에 따라 반응이 달라지는 챗봇.
+Graph DB에 대화를 저장하고, 감정 상태에 따라 반응이 달라지는 챗봇.
 
 ## 실행
 
@@ -36,8 +36,7 @@ NEO4J_PASSWORD=password
 ### 3. 의존성 설치 및 실행
 
 ```bash
-uv sync
-source .venv/bin/activate
+pip install -r requirements.txt
 cd src && python app.py
 ```
 

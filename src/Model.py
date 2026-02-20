@@ -13,7 +13,7 @@ class Model:
     def __init__(self) -> None:
         self.model_id = "Qwen/Qwen3-8B"
         self.temperature = 0.6
-        self.top_p = 0.9
+        self.top_p = 0.95
         self.top_k = 20
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)

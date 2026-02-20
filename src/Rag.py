@@ -143,6 +143,7 @@ class Rag:
                 MATCH (b:Batch {batch_id: $bid})
                 CREATE (t:Turn {
                     turn_id: $tid,
+                    batch_id: $bid,
                     user_text: $ut,
                     ai_text: $at,
                     thinking: $th,
@@ -184,6 +185,7 @@ class Rag:
                 CALL db.index.vector.queryNodes('turn_embedding', $lim, $vec)
                 YIELD node, score
                 WHERE score >= $min_score
+                AND (node.batch_id IS NULL OR $bid IS NULL OR node.batch_id <> $bid)
                 OPTIONAL MATCH (prev)-[:NEXT]->(node)
                 OPTIONAL MATCH (node)-[:NEXT]->(next)
                 RETURN node.turn_id       AS turn_id,
@@ -198,7 +200,7 @@ class Rag:
                        next.user_text     AS next_user_text,
                        next.ai_text       AS next_ai_text
                 """,
-                vec=query_vec, lim=limit, min_score=min_score,
+                vec=query_vec, lim=limit, min_score=min_score, bid=self._batch_id,
             )
             return [dict(r) for r in result]
 

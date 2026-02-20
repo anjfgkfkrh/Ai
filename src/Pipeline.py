@@ -9,7 +9,8 @@ from Emotion import EmotionState
 DECAY_RATE = 0.95
 RECALL_BOOST = 0.3
 CLEANUP_THRESHOLD = 0.1
-MIN_SIMILARITY = 0.7
+MIN_SIMILARITY = 0.8
+RECALL_CONTEXT_TURNS = 2
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 
 
@@ -43,7 +44,9 @@ class ChatPipeline:
         self.logger.info(f"[USER] {user_input}")
 
         # 1. RAG에서 관련 기억 검색 + 기억 풍화
-        memories = self.rag.recall_memory(user_input, limit=10, min_score=MIN_SIMILARITY)
+        context = " ".join(h["content"] for h in self.history[-(RECALL_CONTEXT_TURNS * 2):])
+        recall_query = f"{context} {user_input}".strip()
+        memories = self.rag.recall_memory(recall_query, limit=10, min_score=MIN_SIMILARITY)
         self.rag.decay_memories(DECAY_RATE)
         self.rag.cleanup_weak_memories(CLEANUP_THRESHOLD)
         for m in memories:

@@ -12,7 +12,7 @@ CONTEXT_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "contex
 class Model:
     def __init__(self) -> None:
         self.model_id = "Qwen/Qwen3-8B"
-        self.temperature = 0.7
+        self.temperature = 0.6
         self.top_p = 0.9
         self.top_k = 20
 

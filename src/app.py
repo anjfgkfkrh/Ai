@@ -6,7 +6,7 @@ load_dotenv()
 import gradio as gr
 from Pipeline import ChatPipeline
 
-pipeline = ChatPipeline(max_history=50)
+pipeline = ChatPipeline(max_history=30)
 
 
 def chat(message: str, history: list[dict]) -> str:

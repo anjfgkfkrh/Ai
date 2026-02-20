@@ -3,7 +3,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model
 
-MAX_NEW_TOKENS = 512         # utterance 생성용
+MAX_NEW_TOKENS = 2048         # utterance 생성용
 MAX_NEW_TOKENS_SUMMARY = 256 # summary 생성용
 SYSTEM_PROMPT_PATH  = os.path.join(os.path.dirname(__file__), "prompts", "system_prompt.txt")
 CONTEXT_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "context_prompt.txt")
@@ -57,12 +57,16 @@ class Model:
             context_prompt = f.read().format(valence=valence, memory=memory)
 
         # 메시지 구성
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": context_prompt},
-        ]
+        # system prompt 추가
+        messages = [{"role": "system", "content": system_prompt},]
+
+        # 대화 기록 추가
         if history:
             messages.extend(history)
+
+        # context prompt 추가
+        messages.append({"role": "user", "content": context_prompt})
+
         messages.append({"role": "user", "content": prompt})
 
         # template 적용
@@ -70,7 +74,7 @@ class Model:
             messages,
             tokenize=False,
             add_generation_prompt=True,
-            enable_thinking=False # Thingking 모드 설정
+            enable_thinking=True # Thingking 모드 설정
         )
 
         # 토큰화
@@ -95,9 +99,16 @@ class Model:
         # 결과 추출
         output_ids = outputs[0][len(model_inputs.input_ids[0]):].tolist() 
 
+        # parsing thinking content
+        try:
+            # rindex finding 151668 (</think>)
+            index = len(output_ids) - output_ids[::-1].index(151668)
+        except ValueError:
+            index = 0
+
         print(f"output token len = {len(output_ids)}")
 
-        content = self.tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
+        content = self.tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
 
         return content
     

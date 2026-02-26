@@ -67,6 +67,7 @@ class Model:
         # context prompt 추가
         messages.append({"role": "user", "content": context_prompt})
 
+        # user prompt 추가
         messages.append({"role": "user", "content": prompt})
 
         # template 적용

@@ -132,7 +132,7 @@ class Rag:
         strength = (
             abs(emotion_delta) * MEMORY_ALPHA
             + abs(emotion) * MEMORY_BETA
-            + random.uniform(0, 0.1) + BASE_STRENGTH
+            + random.uniform(0, 3) + BASE_STRENGTH
         )
 
         embedding = self._embed(f"{user_text} {ai_text}")
@@ -203,6 +203,24 @@ class Rag:
                 vec=query_vec, lim=limit, min_score=min_score, bid=self._batch_id,
             )
             return [dict(r) for r in result]
+
+    def rerank(self, query: str, candidates: list[dict]) -> list[dict]:
+        """candidates를 query와의 코사인 유사도로 재정렬해 반환"""
+        if not candidates:
+            return []
+        query_vec = self._embed(query)
+        id_to_mem = {m["turn_id"]: m for m in candidates}
+        with self.driver.session() as db:
+            result = db.run(
+                """
+                MATCH (t:Turn) WHERE t.turn_id IN $ids
+                RETURN t.turn_id AS turn_id,
+                       vector.similarity.cosine(t.embedding, $vec) AS score
+                ORDER BY score DESC
+                """,
+                ids=list(id_to_mem.keys()), vec=query_vec,
+            )
+            return [id_to_mem[r["turn_id"]] for r in result if r["turn_id"] in id_to_mem]
 
     # ── Memory Maintenance ────────────────────────────────
 

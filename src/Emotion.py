@@ -1,6 +1,6 @@
 import math
 
-EXPONENT_K = 0.08
+EXPONENT_K = 0.06
 
 
 class EmotionState:

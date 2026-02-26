@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from kiwipiepy import Kiwi
 from Model import Model
 from Rag import Rag
 from Emotion import EmotionState
@@ -9,8 +10,11 @@ from Emotion import EmotionState
 DECAY_RATE = 0.95
 RECALL_BOOST = 0.3
 CLEANUP_THRESHOLD = 0.1
-MIN_SIMILARITY = 0.8
+MIN_SIMILARITY = 0.75 # 대화 맥락 검색 최소 유사도
+KEYWORD_MIN_SIMILARITY = 0.6 # 키워드 검색 최소 유사도
 RECALL_CONTEXT_TURNS = 2
+KEYWORD_RECALL_LIMIT = 3       # 명사 기반 키워드 검색 상위 N개
+KEYWORD_RERANK_LIMIT = 5       # 키워드 후보를 대화 흐름 기준 재정렬 후 상위 N개
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 
 
@@ -23,6 +27,7 @@ class ChatPipeline:
         self.emotion = EmotionState()
         self.max_history = max_history
         self.history: list[dict] = []
+        self._kiwi = Kiwi()
         self.logger = logging.getLogger("pipeline")
         self.logger.setLevel(logging.DEBUG)
         sid = self.rag.start_session()
@@ -47,6 +52,27 @@ class ChatPipeline:
         context = " ".join(h["content"] for h in self.history[-(RECALL_CONTEXT_TURNS * 2):])
         recall_query = f"{context} {user_input}".strip()
         memories = self.rag.recall_memory(recall_query, limit=10, min_score=MIN_SIMILARITY)
+
+        nouns = self._extract_nouns(user_input)
+        if nouns:
+            seen = {m["turn_id"] for m in memories}
+            keyword_candidates: list[dict] = []
+            for noun in nouns:
+                for m in self.rag.recall_memory(noun, limit=KEYWORD_RECALL_LIMIT, min_score=KEYWORD_MIN_SIMILARITY):
+                    if m["turn_id"] not in seen:
+                        seen.add(m["turn_id"])
+                        keyword_candidates.append(m)
+            self.logger.info(
+                f"[KEYWORD CANDIDATES({len(keyword_candidates)})] nouns={nouns}\n"
+                + "\n".join(f"  {m['user_text'][:50]} / {m['ai_text'][:50]}" for m in keyword_candidates)
+            )
+            reranked = self.rag.rerank(recall_query, keyword_candidates)[:KEYWORD_RERANK_LIMIT]
+            self.logger.info(
+                f"[KEYWORD RERANK({len(reranked)})] top {KEYWORD_RERANK_LIMIT} by recall_query\n"
+                + "\n".join(f"  {m['user_text'][:50]} / {m['ai_text'][:50]}" for m in reranked)
+            )
+            memories += reranked
+
         self.rag.decay_memories(DECAY_RATE)
         self.rag.cleanup_weak_memories(CLEANUP_THRESHOLD)
         for m in memories:
@@ -102,6 +128,10 @@ class ChatPipeline:
 
     # ── Internal ──────────────────────────────────────────
 
+    def _extract_nouns(self, text: str) -> list[str]:
+        tokens = self._kiwi.tokenize(text)  # type: ignore[arg-type]
+        return [t.form for t in tokens if t.tag in ("NNG", "NNP")]  # type: ignore[union-attr]
+
     def _format_memories(self, memories: list[dict]) -> str:
         if not memories:
             return "(no relevant memories)"
@@ -109,10 +139,13 @@ class ChatPipeline:
         for m in memories:
             lines = []
             if m.get("prev_user_text"):
-                lines.append(f"  (이전) User: {m['prev_user_text']} / AI: {m['prev_ai_text']}")
-            lines.append(f"  (매칭) [emotion: {m['emotion']:.2f}] User: {m['user_text']} / AI: {m['ai_text']}")
+                lines.append(f"  (앞 맥락) \"{m['prev_user_text']}\" / \"{m['prev_ai_text']}\"")
+            lines.append(
+                f"[기억 | 감정: {m['emotion']:.2f}] "
+                f"상대방이 \"{m['user_text']}\"라고 했고, 당시 \"{m['ai_text']}\"로 반응했음."
+            )
             if m.get("next_user_text"):
-                lines.append(f"  (이후) User: {m['next_user_text']} / AI: {m['next_ai_text']}")
+                lines.append(f"  (뒤 맥락) \"{m['next_user_text']}\" / \"{m['next_ai_text']}\"")
             blocks.append("\n".join(lines))
         return "\n---\n".join(blocks)
 

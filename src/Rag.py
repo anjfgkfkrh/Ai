@@ -5,8 +5,8 @@ from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 
 BATCH_MAX_TURNS = 50
-MEMORY_ALPHA = 4.0
-MEMORY_BETA = 2.0
+MEMORY_ALPHA = 6.0
+MEMORY_BETA = 3.0
 EMBEDDING_DIM = 1024
 BASE_STRENGTH = 2
 
@@ -132,7 +132,7 @@ class Rag:
         strength = (
             abs(emotion_delta) * MEMORY_ALPHA
             + abs(emotion) * MEMORY_BETA
-            + random.uniform(0, 3) + BASE_STRENGTH
+            + random.uniform(0, 1) + BASE_STRENGTH
         )
 
         embedding = self._embed(f"{user_text} {ai_text}")

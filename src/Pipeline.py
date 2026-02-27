@@ -1,20 +1,24 @@
 import json
 import logging
 import os
+from datetime import datetime
 from kiwipiepy import Kiwi
 from Model import Model
 from Rag import Rag
 from Emotion import EmotionState
 
 
-DECAY_RATE = 0.95
-RECALL_BOOST = 0.3
-CLEANUP_THRESHOLD = 0.1
-MIN_SIMILARITY = 0.75 # 대화 맥락 검색 최소 유사도
-KEYWORD_MIN_SIMILARITY = 0.6 # 키워드 검색 최소 유사도
-RECALL_CONTEXT_TURNS = 2
+DECAY_RATE = 0.95               # 기억 강도 풍화 %
+RECALL_BOOST = 0.3              # 기억 강도 추가
+CLEANUP_THRESHOLD = 0.1         # 기억 삭제 deadline
+MIN_SIMILARITY = 0.75           # 대화 맥락 검색 최소 유사도
+KEYWORD_MIN_SIMILARITY = 0.6    # 키워드 검색 최소 유사도
+RECALL_CONTEXT_TURNS = 2        # 추가로 가져오는 주위 turn 수
 KEYWORD_RECALL_LIMIT = 3       # 명사 기반 키워드 검색 상위 N개
 KEYWORD_RERANK_LIMIT = 5       # 키워드 후보를 대화 흐름 기준 재정렬 후 상위 N개
+TS_MINUTE_THRESHOLD = 1.5      # 기억 강도 이하 → 분 삭제
+TS_HOUR_THRESHOLD = 0.5        # 기억 강도 이하 → 시 삭제
+TS_DAY_THRESHOLD = 0.15        # 기억 강도 이하 → 일 삭제
 LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "logs")
 
 
@@ -46,6 +50,7 @@ class ChatPipeline:
         self.logger.info(f"[SESSION START] {session_id}")
 
     def chat(self, user_input: str) -> str:
+        now_str = datetime.now().strftime("%Y년 %m월 %d일 %H시 %M분")
         self.logger.info(f"[USER] {user_input}")
 
         # 1. RAG에서 관련 기억 검색 + 기억 풍화
@@ -76,7 +81,7 @@ class ChatPipeline:
         self.rag.decay_memories(DECAY_RATE)
         self.rag.cleanup_weak_memories(CLEANUP_THRESHOLD)
         for m in memories:
-            self.rag.reinforce_turn(m["turn_id"], RECALL_BOOST)
+            self.rag.reinforce_turn(m["turn_id"],   RECALL_BOOST)
         memory_text = self._format_memories(memories)
         self.logger.info(f"[MEMORY]\n{memory_text}")
 
@@ -86,7 +91,7 @@ class ChatPipeline:
 
         # 3. 모델 추론 (LoRA 어댑터 사용)
         raw_output = self.model.talk_with_user(
-            prompt=user_input,
+            prompt=f"[{now_str}] {user_input}",
             valence=self.emotion.valence,
             memory=memory_text,
             history=recent_history,
@@ -119,7 +124,7 @@ class ChatPipeline:
         )
 
         # 7. 히스토리 갱신 (max_history 턴만 유지)
-        self.history.append({"role": "user", "content": user_input})
+        self.history.append({"role": "user", "content": f"[{now_str}] {user_input}"})
         self.history.append({"role": "assistant", "content": utterance})
         self.history = self.history[-(self.max_history * 2):]
 
@@ -132,16 +137,30 @@ class ChatPipeline:
         tokens = self._kiwi.tokenize(text)  # type: ignore[arg-type]
         return [t.form for t in tokens if t.tag in ("NNG", "NNP")]  # type: ignore[union-attr]
 
+    def _format_turn_timestamp(self, ts, strength: float) -> str:
+        if ts is None:
+            return ""
+        if strength >= TS_MINUTE_THRESHOLD:
+            return f"{ts.year}년 {ts.month:02d}월 {ts.day:02d}일 {ts.hour:02d}시 {ts.minute:02d}분"
+        elif strength >= TS_HOUR_THRESHOLD:
+            return f"{ts.year}년 {ts.month:02d}월 {ts.day:02d}일 {ts.hour:02d}시"
+        elif strength >= TS_DAY_THRESHOLD:
+            return f"{ts.year}년 {ts.month:02d}월 {ts.day:02d}일"
+        else:
+            return f"{ts.year}년 {ts.month:02d}월"
+
     def _format_memories(self, memories: list[dict]) -> str:
         if not memories:
             return "(no relevant memories)"
         blocks = []
         for m in memories:
+            ts = self._format_turn_timestamp(m.get("timestamp"), m.get("memory_strength", 0))
+            header = f"[기억 | {ts} | 감정: {m['emotion']:.2f}]" if ts else f"[기억 | 감정: {m['emotion']:.2f}]"
             lines = []
             if m.get("prev_user_text"):
                 lines.append(f"  (앞 맥락) \"{m['prev_user_text']}\" / \"{m['prev_ai_text']}\"")
             lines.append(
-                f"[기억 | 감정: {m['emotion']:.2f}] "
+                f"{header} "
                 f"상대방이 \"{m['user_text']}\"라고 했고, 당시 \"{m['ai_text']}\"로 반응했음."
             )
             if m.get("next_user_text"):

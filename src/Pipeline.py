@@ -8,11 +8,11 @@ from Rag import Rag
 from Emotion import EmotionState
 
 
-DECAY_RATE = 0.95               # 기억 강도 풍화 %
+DECAY_RATE = 0.95               # 기억 풍화 %
 RECALL_BOOST = 0.3              # 기억 강도 추가
 CLEANUP_THRESHOLD = 0.1         # 기억 삭제 deadline
 MIN_SIMILARITY = 0.75           # 대화 맥락 검색 최소 유사도
-KEYWORD_MIN_SIMILARITY = 0.6    # 키워드 검색 최소 유사도
+KEYWORD_MIN_SIMILARITY = 0.75    # 키워드 검색 최소 유사도
 RECALL_CONTEXT_TURNS = 2        # 추가로 가져오는 주위 turn 수
 KEYWORD_RECALL_LIMIT = 3       # 명사 기반 키워드 검색 상위 N개
 KEYWORD_RERANK_LIMIT = 5       # 키워드 후보를 대화 흐름 기준 재정렬 후 상위 N개
